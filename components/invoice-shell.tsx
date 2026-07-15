@@ -22,9 +22,9 @@ export function InvoiceShell({ children, invoice }: { children: React.ReactNode;
             action="Email"
             href={recipientEmail ? `mailto:${recipientEmail}` : "#"}
           />
-          <p className="px-4 pt-4 text-sm text-muted">
-            This invoice was generated through {invoice?.businessName || "{App Name}"}.
-          </p>
+          {invoice ? (
+            <p className="px-4 pt-4 text-sm text-muted">This invoice was generated through {invoice.businessName}.</p>
+          ) : null}
         </aside>
 
         <section className="min-w-0">{children}</section>
