@@ -2,15 +2,35 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { InvoiceClient } from "@/components/invoice-client";
 import { InvoiceShell } from "@/components/invoice-shell";
-import { getInvoice, invoiceTotals, formatMoney } from "@/lib/invoice";
+import {
+  getInvoice,
+  invoiceTotals,
+  formatMoney,
+  InvoiceFetchError,
+} from "@/lib/invoice";
 
 type InvoicePageProps = {
   params: Promise<{ slug: string }>;
 };
 
-export async function generateMetadata({ params }: InvoicePageProps): Promise<Metadata> {
+export async function generateMetadata({
+  params,
+}: InvoicePageProps): Promise<Metadata> {
   const { slug } = await params;
-  const invoice = await getInvoice(slug);
+  let invoice;
+
+  try {
+    invoice = await getInvoice(slug);
+  } catch (error) {
+    if (error instanceof InvoiceFetchError) {
+      return {
+        title: "Invoice unavailable",
+        description: "This invoice could not be loaded right now.",
+      };
+    }
+
+    throw error;
+  }
 
   if (!invoice) {
     return {

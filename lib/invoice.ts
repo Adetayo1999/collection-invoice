@@ -17,6 +17,8 @@ export type AppConfig = {
 
 export type Invoice = {
   id: string;
+  userMerchantId?: string;
+  appId?: string;
   reference: string;
   businessName: string;
   invoiceName: string;
@@ -62,13 +64,39 @@ export type PaymentForm = {
   country: string;
 };
 
+export class InvoiceFetchError extends Error {
+  constructor(
+    message: string,
+    public status?: number,
+  ) {
+    super(message);
+    this.name = "InvoiceFetchError";
+  }
+}
+
 export async function getInvoice(slug: string) {
-  const response = await fetch(`${API_BASE_URL}/invoice-links/public/${encodeURIComponent(slug)}`, {
-    cache: "no-store",
-  });
+  let response: Response;
+
+  try {
+    response = await fetch(
+      `${API_BASE_URL}/invoice-links/public/${encodeURIComponent(slug)}`,
+      {
+        cache: "no-store",
+      },
+    );
+  } catch {
+    throw new InvoiceFetchError("Unable to connect to the invoice service.");
+  }
 
   if (!response.ok) {
-    return null;
+    if (response.status === 404) {
+      return null;
+    }
+
+    throw new InvoiceFetchError(
+      "Unable to load this invoice.",
+      response.status,
+    );
   }
 
   const payload = (await response.json()) as InvoiceResponse;
@@ -107,11 +135,16 @@ export function daysUntilDue(dueDate: string) {
 }
 
 export function serviceTotal(service: InvoiceService) {
-  return toNumber(service.amount) * service.quantity + toNumber(service.chargeValue);
+  return (
+    toNumber(service.amount) * service.quantity + toNumber(service.chargeValue)
+  );
 }
 
 export function invoiceTotals(invoice: Invoice) {
-  const lineSubtotal = invoice.services.reduce((sum, service) => sum + serviceTotal(service), 0);
+  const lineSubtotal = invoice.services.reduce(
+    (sum, service) => sum + serviceTotal(service),
+    0,
+  );
   const subtotal = lineSubtotal || toNumber(invoice.amount);
   const discount = subtotal * (toNumber(invoice.discountPercent) / 100);
   const vat = (subtotal - discount) * (toNumber(invoice.vatPercent) / 100);

@@ -7,7 +7,7 @@ export function InvoiceShell({ children, invoice }: { children: React.ReactNode;
   return (
     <main className="min-h-screen bg-panel px-5 py-8 text-ink sm:px-8 lg:px-12 xl:px-20">
       <div className="mx-auto grid max-w-[1320px] gap-8 lg:grid-cols-[285px_minmax(0,900px)] xl:gap-12">
-        <aside className="space-y-4 pt-2 lg:pt-16">
+        <aside className="order-2 space-y-4 pt-2 lg:order-1 lg:pt-16">
           <SideCard
             icon={<FileText size={24} strokeWidth={2.3} />}
             title="Want to Create Your Own Invoice?"
@@ -15,19 +15,21 @@ export function InvoiceShell({ children, invoice }: { children: React.ReactNode;
             action="Sign up"
             href="#"
           />
-          <SideCard
-            icon={<Mail size={24} strokeWidth={2.3} />}
-            title="Email Sender"
-            body="Click here to send email to the sender of this Invoice"
-            action="Email"
-            href={recipientEmail ? `mailto:${recipientEmail}` : "#"}
-          />
+          {invoice ? (
+            <SideCard
+              icon={<Mail size={24} strokeWidth={2.3} />}
+              title="Email Sender"
+              body="Click here to send email to the sender of this Invoice"
+              action="Email"
+              href={recipientEmail ? `mailto:${recipientEmail}` : "#"}
+            />
+          ) : null}
           {invoice ? (
             <p className="px-4 pt-4 text-sm text-muted">This invoice was generated through {invoice.businessName}.</p>
           ) : null}
         </aside>
 
-        <section className="min-w-0">{children}</section>
+        <section className="order-1 min-w-0 lg:order-2">{children}</section>
       </div>
     </main>
   );

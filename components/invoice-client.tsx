@@ -17,8 +17,38 @@ import {
   type PaymentResponse,
 } from "@/lib/invoice";
 
-const countries = ["Nigeria", "Ghana", "Kenya", "South Africa", "United States", "United Kingdom"];
+const checkoutBaseUrl = "https://blockpay.fuspay.finance";
+const checkoutScriptUrl = `${checkoutBaseUrl}/fuspay-checkout.js`;
+const countries = [
+  { name: "Nigeria", code: "NG", flag: "https://flagcdn.com/w40/ng.png" },
+  { name: "Ghana", code: "GH", flag: "https://flagcdn.com/w40/gh.png" },
+  { name: "Kenya", code: "KE", flag: "https://flagcdn.com/w40/ke.png" },
+  { name: "South Africa", code: "ZA", flag: "https://flagcdn.com/w40/za.png" },
+  { name: "United States", code: "US", flag: "https://flagcdn.com/w40/us.png" },
+  { name: "United Kingdom", code: "GB", flag: "https://flagcdn.com/w40/gb.png" },
+];
 const pendingVisitMaxAgeMs = 30_000;
+
+declare global {
+  interface Window {
+    FuspayCheckout?: {
+      init: (options: { baseUrl: string }) => void;
+      openFromPayLink: (
+        payLink: string,
+        options: {
+          merchantName: string;
+          countryCode: string;
+          countryName: string;
+          countryFlag: string;
+          userRef?: string;
+          merchantRef: string;
+        },
+      ) => void;
+    };
+    __fuspayCheckoutScriptPromise?: Promise<void>;
+    __fuspayCheckoutInitialized?: boolean;
+  }
+}
 
 export function InvoiceClient({ invoice }: { invoice: Invoice }) {
   const [isPaymentModalOpen, setIsPaymentModalOpen] = React.useState(false);
@@ -205,6 +235,7 @@ export function InvoiceClient({ invoice }: { invoice: Invoice }) {
 function VisitTracker({ slug }: { slug: string }) {
   React.useEffect(() => {
     void recordInvoiceVisit(slug);
+    void loadFuspayCheckout();
   }, [slug]);
 
   return null;
@@ -272,6 +303,73 @@ async function recordInvoiceVisit(slug: string) {
   }
 }
 
+function selectedCountry(countryName: string) {
+  return countries.find((country) => country.name === countryName) || countries[0];
+}
+
+function loadFuspayCheckout() {
+  if (window.FuspayCheckout) {
+    return Promise.resolve();
+  }
+
+  if (window.__fuspayCheckoutScriptPromise) {
+    return window.__fuspayCheckoutScriptPromise;
+  }
+
+  window.__fuspayCheckoutScriptPromise = new Promise((resolve, reject) => {
+    const existingScript = document.querySelector<HTMLScriptElement>(`script[src="${checkoutScriptUrl}"]`);
+
+    if (existingScript) {
+      existingScript.addEventListener("load", () => resolve(), { once: true });
+      existingScript.addEventListener("error", () => reject(new Error("Unable to load checkout.")), { once: true });
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = checkoutScriptUrl;
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Unable to load checkout."));
+    document.body.appendChild(script);
+  });
+
+  return window.__fuspayCheckoutScriptPromise;
+}
+
+async function openCheckoutFromPayLink({
+  invoice,
+  form,
+  payLink,
+  merchantRef,
+}: {
+  invoice: Invoice;
+  form: PaymentForm;
+  payLink: string;
+  merchantRef: string;
+}) {
+  await loadFuspayCheckout();
+
+  if (!window.FuspayCheckout) {
+    throw new Error("Checkout is unavailable. Please try again.");
+  }
+
+  if (!window.__fuspayCheckoutInitialized) {
+    window.FuspayCheckout.init({ baseUrl: checkoutBaseUrl });
+    window.__fuspayCheckoutInitialized = true;
+  }
+
+  const country = selectedCountry(form.country);
+
+  window.FuspayCheckout.openFromPayLink(payLink, {
+    merchantName: invoice.businessName,
+    countryCode: country.code,
+    countryName: country.name,
+    countryFlag: country.flag,
+    userRef: invoice.userMerchantId || form.email,
+    merchantRef,
+  });
+}
+
 function PaymentModal({
   invoice,
   totalAmount,
@@ -316,7 +414,12 @@ function PaymentModal({
         throw new Error(payload.message || "Unable to initiate this payment.");
       }
 
-      window.open(payload.data.paymentUrl, "_blank", "noopener,noreferrer");
+      await openCheckoutFromPayLink({
+        invoice,
+        form,
+        payLink: payload.data.paymentUrl,
+        merchantRef: payload.data.txnMerchantRef,
+      });
       onClose();
     } catch (submitError) {
       const message = submitError instanceof Error ? submitError.message : "Unable to initiate this payment.";
@@ -443,8 +546,8 @@ function CountrySelect({ value, onChange }: { value: string; onChange: (value: s
         required
       >
         {countries.map((country) => (
-          <option key={country} value={country}>
-            {country}
+          <option key={country.code} value={country.name}>
+            {country.name}
           </option>
         ))}
       </select>
